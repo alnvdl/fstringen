@@ -2,7 +2,7 @@ import setuptools
 
 setuptools.setup(
     name="fstringen",
-    version="0.0.1",
+    version="0.0.2",
     author="Allan Vidal",
     description="A text generator based on f-strings",
     url="https://github.com/alnvdl/fstringen",
