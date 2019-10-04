@@ -212,17 +212,17 @@ class Model:
         if callerctx is None:
             callerctx = inspect.currentframe().f_back
 
-        # Root indicators (the initial /) are optional, since paths are always
-        # relative to their ctx
         obj = self.model
         root = False
+        # Ignore ref indicators and browse accordingly
         if path.startswith(self.refindicator):
             path = path[1:]
+        # When an absolute path is used in a query, revert to the root model
         if path.startswith("/"):
             path = path[1:]
             obj = self.root_model
             root = True
-        # Empty path trailings are ignored as well
+        # Empty path trailings are ignored
         if path.endswith("/"):
             path = path[:-1]
 
