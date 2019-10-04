@@ -1,6 +1,6 @@
 # fstringen
 fstringen (pronounced: f-string-gen) is a library for writing text and code
-generators in Python. It's builds upon [f-strings](
+generators in Python. It builds upon [f-strings](
 https://docs.python.org/3/reference/lexical_analysis.html#f-strings) available
 in Python 3.6+, and it is based on two core concepts: models and generators.
 
@@ -16,7 +16,7 @@ operation is run on `Model`s to select a sub-model based on a path selection
 mechanism.
 
 Generators are functions annotated with the `@gen()` decorator, which gives
-them some extra powers to f-strings expressions in them (automagic indentation,
+some extra powers to f-strings expressions in them (automagic indentation,
 smart list insertion and scope-related hacks). Generators may also be
 configured to automatically output to files, with optional header notices.
 
