@@ -262,6 +262,26 @@ class TestGen(unittest.TestCase):
 
         self.assertEqual(fn(), "dict: {'x': 1}")
 
+    def test_return_none(self):
+        @gen()
+        def fn_none():
+            return
+
+        @gen()
+        def fn():
+            a = "2"
+            l = [1, None, 2]
+            return f"""*
+            a: 2{fn_none()}
+            {l}
+            {fn_none()}
+            b
+            *"""
+
+        # When None is part of a list, it should be hidden
+        # When None is a direct value, it shows as ""
+        self.assertEqual(fn(), "a: 2\n1\n2\n\nb")
+
     def test_call(self):
         @gen()
         def abc():

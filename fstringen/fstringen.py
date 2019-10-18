@@ -32,9 +32,11 @@ def _putify(template):
 
 def _put(obj, indent):
     if type(obj) in (list, tuple):
-        newobj = [str(el).replace("\n", "\n" + indent) for el in obj]
+        newobj = [str(el).replace("\n", "\n" + indent) for el in obj if el is not None]
         return ("\n" + indent).join(newobj)
     else:
+        if obj is None:
+            return ""
         return str(obj).replace("\n", "\n" + indent)
 
 
@@ -74,6 +76,8 @@ def gen(model=None, fname=None, comment=None, notice=True):
 
         def newfn(*args, **kwargs):
             r = newgen(*args, **kwargs)
+            if r is None:
+                return
             v = textwrap.dedent(r)
             if len(v) > 0 and v[0] == "\n":
                 v = v[1:]
