@@ -31,8 +31,9 @@ def _putify(template):
 
 
 def _put(obj, indent):
-    if type(obj) in (list, tuple):
-        newobj = [str(el).replace("\n", "\n" + indent) for el in obj if el is not None]
+    if isinstance(obj, list) or isinstance(obj, tuple):
+        newobj = [str(el).replace("\n", "\n" + indent)
+                  for el in obj if el is not None]
         return ("\n" + indent).join(newobj)
     else:
         if obj is None:
@@ -53,6 +54,7 @@ def _compile(fstringstar):
     fstring = "_fstringstar = f\"\"\"{}\"\"\"".format(_putify(fstringstar))
 
     exec(fstring, globals_, locals_)
+
     output = locals_["_fstringstar"]
     return output
 
@@ -147,60 +149,75 @@ class Mapper:
             key, "<! MAPPING NOT FOUND IN '{}': {} !>".format(self.name, key))
 
 
-class Model:
-    def __init__(self, name, model, refindicator="#", root_model=None):
+class Selectable:
+    def __new__(cls, name, value, refindicator="#", root=None):
+        # Pick Selectable methods that should be used
+        methods = {}
+        for method in cls.__dict__:
+            if not method.startswith("__"):
+                methods[method] = cls.__dict__[method]
+
+        # Python does not allow subclassing bool, so we use an adapted int
+        if type(value) == bool:
+            value = int(value)
+
+            def custom_repr_str(instance):
+                return str(bool(instance.value))
+
+            methods["__repr__"] = custom_repr_str
+            methods["__str__"] = custom_repr_str
+        # None cannot be subclassed either, use an empty string instead
+        elif value is None:
+            value = ""
+
+            def custom_repr_str(instance):
+                return "None"
+
+            def custom_eq(instance, other):
+                return other is None
+
+            methods["__repr__"] = custom_repr_str
+            methods["__str__"] = custom_repr_str
+            methods["__eq__"] = custom_eq
+
+        # New type will be a subclass of the value, with the extra methods
+        # defined in Selectable
+        newcls = type(cls.__name__, (type(value),), methods)
+        obj = newcls(value)
+        # Initialize non-value attributes
+        obj._initSelectable(name, refindicator, root)
+        return obj
+
+    def _initSelectable(self, name, refindicator, root):
         self.name = name
-        self.model = model
+        self.value = self
         self.refindicator = refindicator
-        self.root_model = root_model
-        if self.root_model is None:
-            self.root_model = model
+        self.root = root
+        if self.root is None:
+            self.root = self.value
 
     @staticmethod
-    def fromYAML(fname, refindicator="#", root_model=None):
+    def fromYAML(fname, refindicator="#", root=None):
+        """ Loads a Selectable from a YAML file """
         if yaml is None:
             raise FStringenError("Cannot find 'yaml' module")
-        return Model(fname,
+        return Selectable(fname,
                      yaml.load(open(fname, "r").read(), Loader=yaml.Loader),
-                     refindicator, root_model)
+                     refindicator, root)
 
     @staticmethod
-    def fromJSON(fname, refindicator="#", root_model=None):
-        return Model(fname, json.loads(open(fname, "r").read()), refindicator,
-                     root_model)
+    def fromJSON(fname, refindicator="#", root=None):
+        """ Loads a Selectable from a JSON file """
+        return Selectable(fname, json.loads(open(fname, "r").read()), refindicator,
+                     root)
 
     @staticmethod
-    def fromDict(dict_, name="dict", refindicator="#", root_model=None):
-        return Model(name, dict_, refindicator, root_model)
-
-    def __iter__(self):
-        return iter(self.model)
-
-    def __getitem__(self, key):
-        if type(self.model) in (list, tuple):
-            try:
-                key = int(key)
-            except ValueError:
-                raise FStringenError(
-                    "array model navigation requires integers")
-        return self.model[key]
-
-    def __str__(self):
-        return str(self.model)
-
-    def __repr__(self):
-        return repr(self.model)
-
-    def dict(self):
-        return self.model
-
-    def __eq__(self, other):
-        return self.model == other.model and \
-            self.name == other.name and \
-            self.refindicator == other.refindicator and \
-            self.root_model == other.root_model
+    def fromDict(dict_, name="dict", refindicator="#", root=None):
+        """ Loads a Selectable from a Python dictionary """
+        return Selectable(name, dict_, refindicator, root)
 
     def has(self, path):
+        """ Returns True if path exists in the Selectable """
         callerctx = inspect.currentframe().f_back
         try:
             self.select(path, callerctx)
@@ -209,22 +226,31 @@ class Model:
 
         return True
 
-    def _new(self, name, submodel):
-        return Model(name, submodel, self.refindicator, self.root_model)
+    def isreference(self, path):
+        """ Returns True if path is a possible reference """
+        callerctx = inspect.currentframe().f_back
+        value = self.select(path, callerctx)
+        return isinstance(value, str) and value.startswith(self.refindicator)
+
+    def _new(self, name, selectable):
+        """ Instantiates a Selectable keeping the same root """
+        return Selectable(name, selectable, self.refindicator, self.root)
 
     def select(self, path, callerctx=None):
+        """ Returns a new Selectable based on path """
+
         if callerctx is None:
             callerctx = inspect.currentframe().f_back
 
-        obj = self.model
+        obj = self.value
         root = False
         # Ignore ref indicators and browse accordingly
         if path.startswith(self.refindicator):
             path = path[1:]
-        # When an absolute path is used in a query, revert to the root model
+        # When an absolute path is used in a query, revert to the root
         if path.startswith("/"):
             path = path[1:]
-            obj = self.root_model
+            obj = self.root
             root = True
         # Empty path trailings are ignored
         if path.endswith("/"):
@@ -237,11 +263,10 @@ class Model:
 
         lastpart = None
 
-        # TODO: we should probably browse models recursively instead of in a
-        # loop
         for i in range(len(parts)):
             part = parts[i]
 
+            # Replace <variables> with their values
             match = re.match(r"\<([^<>]*)\>", part)
             if match is not None and match.lastindex == 1:
                 var = match[1]
@@ -263,27 +288,34 @@ class Model:
                 if not hasattr(obj, "items"):
                     raise FStringenError("cannot iterate over '{}'".format(
                         "/".join(curpath[:-1])))
-                return tuple(self._new(k, v) for k, v in obj.items())
+                elements = tuple(self._new(k, v) for k, v in obj.items())
+                return self._new("*", elements)
             elif part.endswith("->"):
                 part = part[:-2]
                 newpath = obj[part]
-                newmodel = self._new(part, obj)
-                return newmodel.select(newpath, callerctx)
+                newselectable = self._new(part, obj)
+                return newselectable.select(newpath, callerctx)
             else:
-                if type(obj) in (list, tuple):
+                if isinstance(obj, list) or isinstance(obj, tuple):
                     try:
                         part = int(part)
                     except ValueError:
                         raise FStringenError(
-                            "array model navigation requires integers")
+                            "array navigation requires integers")
+                elif not isinstance(obj, dict):
+                    raise FStringenError(
+                            "cannot lookup path '{}' in value '{}'".format(
+                                part, str(obj)))
                 try:
                     obj = obj[part]
                 except (KeyError, IndexError):
                     raise FStringenNotFound(
-                        "could not find path '{}' in model '{}'".format(
+                        "could not find path '{}' in '{}'".format(
                             "/".join(curpath), obj))
 
             lastpart = part
 
-        return self._new(lastpart, obj) if type(obj) in (list, tuple,
-                                                         dict) else obj
+        return self._new(lastpart, obj)
+
+
+Model = Selectable

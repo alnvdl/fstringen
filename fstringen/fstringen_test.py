@@ -9,6 +9,7 @@ test_model = {
                 "color": "blue",
                 "age": 3,
                 "dead": False,
+                "nothing": None,
                 "nicknames": ["cA", "compA", "A"],
                 "brokenref": "$/components/componentX"
             }
@@ -31,26 +32,47 @@ test_model = {
 
 class TestModel(unittest.TestCase):
     def test_select_absolute(self):
+        # Sub-dict selection
         m = Model.fromDict(test_model)
         self.assertDictEqual(
-            m.select("/components").dict(), test_model["components"])
+            m.select("/components"), test_model["components"])
+
+        # * selection
         self.assertEqual(
             m.select("/components/*"),
-            (Model.fromDict(test_model["components"]["componentA"],
-                            name="componentA",
-                            root_model=test_model),
-             Model.fromDict(test_model["components"]["componentB"],
-                            name="componentB",
-                            root_model=test_model)))
+            (test_model["components"]["componentA"],
+             test_model["components"]["componentB"]))
+        self.assertEqual(m.select("/components/*").name, "*")
+        # Selectables have extra attributes, check those
+        self.assertEqual(
+            [el.name for el in m.select("/components/*")],
+            ["componentA", "componentB"])
+        self.assertEqual(
+            [el.refindicator for el in m.select("/components/*")],
+            [m.refindicator, m.refindicator])
+        self.assertEqual(
+            [el.root for el in m.select("/components/*")],
+            [m, m])
+        self.assertEqual(
+            m.select("/components/*").select("/components/componentA"),
+            test_model["components"]["componentA"])
+        self.assertEqual(
+            m.select("/components/*").select("1"),
+            test_model["components"]["componentB"])
+
+        # Two-level sub-dict selection
         self.assertEqual(
             m.select("/components/componentB"),
             (Model.fromDict(test_model["components"]["componentB"],
                             name="componentB",
-                            root_model=test_model)))
+                            root=test_model)))
+
+        # Leaf selection
         self.assertEqual(m.select("/components/componentB/properties/color"),
                          "red")
-        self.assertEqual(m.select("/week"), (Model.fromDict(
-            test_model["week"], name="week", root_model=test_model)))
+        self.assertEqual(m.select("/components/componentA/properties/nothing"),
+                         None)
+        self.assertEqual(m.select("/week"), test_model["week"])
         self.assertRaisesRegex(FStringenNotFound,
                                "could not find path '/doesnotexist'.*",
                                m.select, "/doesnotexist")
@@ -71,10 +93,7 @@ class TestModel(unittest.TestCase):
         m = Model.fromDict(test_model)
         components = m.select("/components")
         compA = components.select("componentA")
-        self.assertEqual(
-            compA, (Model.fromDict(test_model["components"]["componentA"],
-                                   name="componentA",
-                                   root_model=test_model)))
+        self.assertEqual(compA, test_model["components"]["componentA"])
         leaf = compA.select("properties/dead")
         self.assertEqual(leaf, False)
 
@@ -82,10 +101,7 @@ class TestModel(unittest.TestCase):
         m = Model.fromDict(test_model)
         self.assertEqual(
             m.select("/components/componentA/properties/nicknames"),
-            (Model.fromDict(test_model["components"]["componentA"]
-                            ["properties"]["nicknames"],
-                            name="nicknames",
-                            root_model=test_model)))
+            test_model["components"]["componentA"]["properties"]["nicknames"])
         self.assertEqual(
             m.select("/components/componentA/properties/nicknames/0"), "cA")
         self.assertEqual(
@@ -101,7 +117,7 @@ class TestModel(unittest.TestCase):
         self.assertEqual(m.select("/week/2"), "wed")
         self.assertEqual(m.select("/week/-1"), "fri")
         self.assertRaisesRegex(FStringenError,
-                               "array model navigation requires integers",
+                               "array navigation requires integers",
                                m.select, "/week/a")
 
     def test_select_ref(self):
@@ -110,17 +126,11 @@ class TestModel(unittest.TestCase):
                          "$/components/componentA")
         self.assertEqual(
             m.select("/components/componentB/properties/parent->"),
-            (Model.fromDict(test_model["components"]["componentA"],
-                            name="componentA",
-                            refindicator="$",
-                            root_model=test_model)))
+            test_model["components"]["componentA"])
         ref = m.select("/components/componentB/properties/parent") # noqa
         self.assertEqual(
             m.select("<ref>->"),
-            (Model.fromDict(test_model["components"]["componentA"],
-                            name="componentA",
-                            refindicator="$",
-                            root_model=test_model)))
+            test_model["components"]["componentA"])
         # Relative path seletion
         rref = m.select("/components/componentB/favoriteprop->")
         self.assertEqual(rref, "red")
@@ -252,6 +262,21 @@ class TestGen(unittest.TestCase):
 
         self.assertEqual(fn2(), "1\n2")
 
+    def test_indent(self):
+        @gen()
+        def fn(cond):
+            a = [1, 2]
+            if cond:
+                return f"""*
+                {a}
+                *"""
+            return f"""*
+            {a}
+            *"""
+
+        self.assertEqual(fn(False), "1\n2")
+        self.assertEqual(fn(True), "1\n2")
+
     def test_dict(self):
         @gen()
         def fn():
@@ -269,8 +294,8 @@ class TestGen(unittest.TestCase):
 
         @gen()
         def fn():
-            a = "2"
-            l = [1, None, 2]
+            a = "2" # noqa
+            l = [1, None, 2] # noqa
             return f"""*
             a: 2{fn_none()}
             {l}
