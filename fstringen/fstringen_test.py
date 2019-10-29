@@ -192,6 +192,21 @@ class TestGen(unittest.TestCase):
 
         self.assertEqual(fn2(), "x\n  1\nsomething\n   .")
 
+    def test_quotes(self):
+        @gen()
+        def fn():
+            a = 1
+            return f"""
+            "{a}"
+            """
+        self.assertEqual(fn(), "\"1\"")
+
+        @gen()
+        def fn2():
+            a = 1
+            return f"""\\\"{a}\\\""""
+        self.assertEqual(fn(), "\"1\"")
+
     def test_blank_lines(self):
         @gen()
         def fn():
@@ -264,6 +279,14 @@ class TestGen(unittest.TestCase):
 
     def test_indent(self):
         @gen()
+        def multiline_string():
+            return """
+            multiline
+              string
+            """
+
+        # Indentation-level of outside code shouldn't interfere
+        @gen()
         def fn(cond):
             a = [1, 2]
             if cond:
@@ -273,9 +296,17 @@ class TestGen(unittest.TestCase):
             return f"""*
             {a}
             *"""
-
         self.assertEqual(fn(False), "1\n2")
         self.assertEqual(fn(True), "1\n2")
+
+        # Multi-line strings should be dedented
+        @gen()
+        def fn2():
+            a = [multiline_string(), multiline_string()]
+            return f"""*
+            {a}
+            *"""
+        self.assertEqual(fn2(), "multiline\n  string\nmultiline\n  string")
 
     def test_dict(self):
         @gen()

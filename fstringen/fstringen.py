@@ -11,6 +11,9 @@ except ImportError:
 
 
 def _putify(template):
+    if "\n" in template:
+        template = textwrap.dedent(template)
+
     lines = template.split("\n")
     newlines = []
     for line in lines:
@@ -80,12 +83,15 @@ def gen(model=None, fname=None, comment=None, notice=True):
             r = newgen(*args, **kwargs)
             if r is None:
                 return
-            v = textwrap.dedent(r)
-            if len(v) > 0 and v[0] == "\n":
-                v = v[1:]
-            if len(v) > 0 and v[-1] == "\n":
-                v = v[:-1]
-            return v
+            elif isinstance(r, str):
+                v = textwrap.dedent(r)
+                if len(v) > 0 and v[0] == "\n":
+                    v = v[1:]
+                if len(v) > 0 and v[-1] == "\n":
+                    v = v[:-1]
+                return v
+            else:
+                return r
 
         if fname:
             if notice and not comment:
@@ -202,22 +208,25 @@ class Selectable:
         if yaml is None:
             raise FStringenError("Cannot find 'yaml' module")
         return Selectable(fname,
-                     yaml.load(open(fname, "r").read(), Loader=yaml.Loader),
-                     refindicator, root)
+                          yaml.load(open(fname, "r").read(),
+                                    Loader=yaml.Loader),
+                          refindicator, root)
 
     @staticmethod
     def fromJSON(fname, refindicator="#", root=None):
         """ Loads a Selectable from a JSON file """
-        return Selectable(fname, json.loads(open(fname, "r").read()), refindicator,
-                     root)
+        return Selectable(fname, json.loads(open(fname, "r").read()),
+                          refindicator, root)
 
     @staticmethod
     def fromDict(dict_, name="dict", refindicator="#", root=None):
         """ Loads a Selectable from a Python dictionary """
         return Selectable(name, dict_, refindicator, root)
 
-    def has(self, path):
+    def has(self, path=None):
         """ Returns True if path exists in the Selectable """
+        if path is None:
+            return True # We know we exist because we exist :-)
         callerctx = inspect.currentframe().f_back
         try:
             self.select(path, callerctx)
@@ -226,11 +235,27 @@ class Selectable:
 
         return True
 
-    def isreference(self, path):
+    def is_reference(self, path=None):
         """ Returns True if path is a possible reference """
-        callerctx = inspect.currentframe().f_back
-        value = self.select(path, callerctx)
+        if path is None:
+            value = self.value
+        else:
+            callerctx = inspect.currentframe().f_back
+            value = self.select(path, callerctx)
         return isinstance(value, str) and value.startswith(self.refindicator)
+
+    def is_enabled(self, path=None):
+        """ Returns True if path exists and its value is True """
+        if path is None:
+            value = self.value
+        else:
+            try:
+                callerctx = inspect.currentframe().f_back
+                value = self.select(path, callerctx)
+            except FStringenError:
+                return False
+
+        return isinstance(value, int) and value != 0
 
     def _new(self, name, selectable):
         """ Instantiates a Selectable keeping the same root """

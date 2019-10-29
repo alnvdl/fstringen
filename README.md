@@ -10,15 +10,16 @@ just one possible use case. It can take any dictionary-equivalent model
 rudimentary support for cross-references. Generators then transform this model
 in the desired output.
 
-A `Model` is simply a Python dictionary (which may be sourced from a YAML or
-JSON file) representing a hierarchy, typically with deep nesting. The `select`
-operation is run on `Model`s to select a sub-model based on a path selection
-mechanism.
+A `Selectable` is simply a Python dictionary (which may be sourced from a YAML
+or JSON file) representing a hierarchy, typically with deep nesting. The
+`select` operation is run on `Selectable`s to select a new `Selectable` based
+on a path selection mechanism. `Model` is just an alias for `Selectable`, and
+it's usually used when referring to a `Selectable` loaded from a file
 
 Generators are functions annotated with the `@gen()` decorator, which gives
-some extra powers to f-strings expressions in them (automagic indentation,
-smart list insertion and scope-related hacks). Generators may also be
-configured to automatically output to files, with optional header notices.
+some extra powers to special f-strings expressions in them (automagic
+indentation, smart list insertion and scope-related hacks). Generators may also
+be configured to automatically output to files, with optional header notices.
 
 ## Installing
 You can install directly from PyPI:
@@ -50,6 +51,7 @@ model = Model.fromDict({
     }
 })
 
+
 @gen()
 def gen_struct(struct):
     fields = ["{} {}".format(field.name, field)
@@ -62,6 +64,7 @@ def gen_struct(struct):
 
     *"""
 
+
 @gen(model=model, fname="myfile.go", comment="//")
 def gen_myfile(model):
     return f"""*
@@ -70,41 +73,41 @@ def gen_myfile(model):
     // Let's generate some structs!
     {[gen_struct(struct) for struct in model.select("/structs/*")]}
     *"""
-
 ```
 
 All generator functions using fstringstars must be decorated with `@gen()`.
 When no parameters are given, the generator is considerate a subordinate
-generator. When the `model` and `fname` arguments are used, the generator
-becomes a file generator, which is automatically executed and output to that
-file when the script exists (i.e., you don't need to explicitly call any
-generator).
+generator (i.e., they need to be called explicitly from other generators).
+When the `model` and `fname` arguments are used, the generator becomes a file
+generator, which is automatically executed and output to that file when the
+script exists (i.e., you don't need to explicitly call file generators).
 
 Inside generators, fstringstars can use regular f-string `{expression}`
 invocations.
 
-The real power of fstringen comes with models, which allow easy selection of
-model features:
+The real power of fstringen comes with `Selectable`s and `Model`s, which allow
+easy selection of data (`Model` is just an alias for `Selectable`, and `Model`
+is usually used when referring to a `Selectable` loaded from a file):
 
-- Every model has the `select` method, which takes a `path` and returns a new
-  sub-model based on the query that path indicates.
+- Every `Selectable` has the `select` method, which takes a `path` and returns
+  a new `Selectable` based on the query that path indicates.
+- Every `Selectable` has a `name` attribute, corresponding to the dictionary
+  key or array index for that element.
 - If a path ends with `/*` and the preceding path contains a dictionary,
-  a list of sub-models is returned, containing all items in that dictionary.
-  Every sub-model has a `name` attribute, corresponding to the dictionary key
-  for that element.
+  a `Selectable` list of `Selectable`s is returned, containing all items in
+  that dictionary.
 - If a path element ends with `->`, the value contained in that attribute is
   assumed to contain a path (absolute or relative), and that path is used to
-  look up the referenced object in the same model. The remainder of the path is
-  used to continue the query on that object.
-- If the select ends up in a leaf in the model, the value is returned (not a
-  sub-model model).
-- The `has` method in a model allows for verification of the existance of a
-  path in the model.
+  look up the referenced object in the same `Model`.
+- Three convenience methods are also available in `Selectable`s. All of them
+  can take a path to query under that `Selectable`, of if called without a
+  path, they apply to the `Selectable` in question:
+  - `is_reference` checks whether a given `Selectable` contains a reference.
+  - `has` allows for verification of the existence of a path under that
+    `Selectable`.
+  - `is_enabled` method verifies that the path exists and has a truthy value.
 
-It looks more complicated than it really is, but it's really easy to understand
-once you start using!
-
-So the two main imports from `fstringen` are `gen` and `Model`. An additional
+The two main imports from `fstringen` are `gen` and `Model`. An additional
 import is available, `Mapper`, but it's entirely optional. It wraps a
 dictionary for looking up things like type mappings, and it returns alarming
 strings when no match is found.
@@ -116,3 +119,45 @@ generators alone (i.e., they don't do anything else). We sacrificed correctness
 for neatness and ease-to-use.
 
 Python 3.6+ is required. PyYAML is an optional dependency.
+
+## Known issues
+Because of Python limitations, a few things are not possible:
+
+**Quotes in fstringstars strings**
+
+Just as you can't have a triple-quoted string like this in Python:
+
+    my_str = """"a""""
+
+You can't have a fstringstar like this:
+
+    my_fstringsar = f"""*"a"*"""
+
+That's because Python can't figure out how that string starts or ends
+(fstringstars are compiled to triple-quoted Python f-strings). You achieve the
+same result in two different ways. Using line breaks:
+
+    my_fstringsar = f"""*
+    "a"
+    *"""
+
+Or with escapes in a single-line:
+
+    my_fstringsar = f"""*\\\"a\\\"*"""
+
+
+** Don't compare with `is` **
+
+When dealing with a `Selectable` or a `Model`, don't use the `is` comparison
+operator. Consider the following code:
+
+    mybool = model.select("/path/to/a/bool")
+
+When checking whether `mybool` is `True` or `False`, do it using `==` or if in
+a conditional, just check it directly without a comparison. The same applies
+to `None`.
+
+The reason for this limitation is that Python does not allow us to subclass
+`None`, `True` and `False`, which are global objects that can't be changed.
+Since `select` always returns a `Selectable`, that `Selectable` can never be
+such a global object, and therefore `is` comparisons will always fail.
