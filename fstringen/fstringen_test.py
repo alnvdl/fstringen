@@ -32,17 +32,59 @@ test_model = {
 
 class TestModel(unittest.TestCase):
     def test_select_absolute(self):
-        # Sub-dict selection
         m = Model.fromDict(test_model)
+        # Sub-dict selection
         self.assertDictEqual(
             m.select("/components"), test_model["components"])
+        self.assertEqual(
+            m.select("/components").type, dict)
 
-        # * selection
+        # Two-level sub-dict selection
+        self.assertEqual(
+            m.select("/components/componentB"),
+            (Model.fromDict(test_model["components"]["componentB"],
+                            name="componentB",
+                            root=test_model)))
+
+        # Leaf selection
+        self.assertEqual(m.select("/components/componentB/properties/color"),
+                         "red")
+        self.assertEqual(
+            m.select("/components/componentB/properties/color").type,
+            str
+        )
+        self.assertEqual(m.select("/components/componentA/properties/nothing"),
+                         None)
+        self.assertEqual(
+            m.select("/components/componentA/properties/nothing").type,
+            type(None)
+        )
+        self.assertEqual(m.select("/week"), test_model["week"])
+        self.assertEqual(m.select("/week").type, list)
+        self.assertRaisesRegex(FStringenNotFound,
+                               "could not find path '/doesnotexist'.*",
+                               m.select, "/doesnotexist")
+        self.assertRaisesRegex(
+            FStringenNotFound,
+            "could not find path '/components/componentX'.*", m.select,
+            "/components/componentX")
+        self.assertRaisesRegex(
+            FStringenNotFound,
+            "could not find path '/components/componentB/properties/height'.*",
+            m.select, "/components/componentB/properties/height")
+        self.assertRaisesRegex(
+            FStringenError,
+            "cannot iterate over '/components/componentB/properties/color'",
+            m.select, "/components/componentB/properties/color/*")
+
+    def test_select_star(self):
+        m = Model.fromDict(test_model)
         self.assertEqual(
             m.select("/components/*"),
             (test_model["components"]["componentA"],
              test_model["components"]["componentB"]))
         self.assertEqual(m.select("/components/*").name, "*")
+        self.assertEqual(m.select("/components/*").type, tuple)
         # Selectables have extra attributes, check those
         self.assertEqual(
             [el.name for el in m.select("/components/*")],
@@ -59,35 +101,6 @@ class TestModel(unittest.TestCase):
         self.assertEqual(
             m.select("/components/*").select("1"),
             test_model["components"]["componentB"])
-
-        # Two-level sub-dict selection
-        self.assertEqual(
-            m.select("/components/componentB"),
-            (Model.fromDict(test_model["components"]["componentB"],
-                            name="componentB",
-                            root=test_model)))
-
-        # Leaf selection
-        self.assertEqual(m.select("/components/componentB/properties/color"),
-                         "red")
-        self.assertEqual(m.select("/components/componentA/properties/nothing"),
-                         None)
-        self.assertEqual(m.select("/week"), test_model["week"])
-        self.assertRaisesRegex(FStringenNotFound,
-                               "could not find path '/doesnotexist'.*",
-                               m.select, "/doesnotexist")
-        self.assertRaisesRegex(
-            FStringenNotFound,
-            "could not find path '/components/componentX'.*", m.select,
-            "/components/componentX")
-        self.assertRaisesRegex(
-            FStringenNotFound,
-            "could not find path '/components/componentB/properties/height'.*",
-            m.select, "/components/componentB/properties/height")
-        self.assertRaisesRegex(
-            FStringenError,
-            "cannot iterate over '/components/componentB/properties/color'",
-            m.select, "/components/componentB/properties/color/*")
 
     def test_select_relative(self):
         m = Model.fromDict(test_model)

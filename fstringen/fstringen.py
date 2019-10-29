@@ -163,48 +163,56 @@ class Selectable:
             if not method.startswith("__"):
                 methods[method] = cls.__dict__[method]
 
+        original_type = type(value)
         # Python does not allow subclassing bool, so we use an adapted int
         if type(value) == bool:
             value = int(value)
 
-            def custom_repr_str(instance):
-                return str(bool(instance.value))
+            def custom_repr_str(this):
+                return str(bool(this.value))
 
             methods["__repr__"] = custom_repr_str
             methods["__str__"] = custom_repr_str
+
         # None cannot be subclassed either, use an empty string instead
         elif value is None:
             value = ""
 
-            def custom_repr_str(instance):
+            def custom_repr_str(this):
                 return "None"
 
-            def custom_eq(instance, other):
+            def custom_eq(this, other):
                 return other is None
 
             methods["__repr__"] = custom_repr_str
             methods["__str__"] = custom_repr_str
             methods["__eq__"] = custom_eq
 
-        # New type will be a subclass of the value, with the extra methods
+        # New type will be a subclass of the value type, with the extra methods
         # defined in Selectable
         newcls = type(cls.__name__, (type(value),), methods)
         obj = newcls(value)
         # Initialize non-value attributes
-        obj._initSelectable(name, refindicator, root)
+        obj._initSelectable(name, original_type, refindicator, root)
         return obj
 
-    def _initSelectable(self, name, refindicator, root):
+    def _initSelectable(self, name, original_type, refindicator, root):
+        """ Sets internal Selectable values """
         self.name = name
         self.value = self
+        self.type = original_type
         self.refindicator = refindicator
         self.root = root
         if self.root is None:
             self.root = self.value
 
+    def _new(self, name, selectable):
+        """ Instantiates a Selectable keeping the same root. """
+        return Selectable(name, selectable, self.refindicator, self.root)
+
     @staticmethod
     def fromYAML(fname, refindicator="#", root=None):
-        """ Loads a Selectable from a YAML file """
+        """ Loads a Selectable from a YAML file. """
         if yaml is None:
             raise FStringenError("Cannot find 'yaml' module")
         return Selectable(fname,
@@ -214,19 +222,20 @@ class Selectable:
 
     @staticmethod
     def fromJSON(fname, refindicator="#", root=None):
-        """ Loads a Selectable from a JSON file """
+        """ Loads a Selectable from a JSON file. """
         return Selectable(fname, json.loads(open(fname, "r").read()),
                           refindicator, root)
 
     @staticmethod
     def fromDict(dict_, name="dict", refindicator="#", root=None):
-        """ Loads a Selectable from a Python dictionary """
+        """ Loads a Selectable from a Python dictionary. """
         return Selectable(name, dict_, refindicator, root)
 
     def has(self, path=None):
-        """ Returns True if path exists in the Selectable """
+        """ Returns True if path exists in the Selectable. If path is None,
+        returns True. """
         if path is None:
-            return True # We know we exist because we exist :-)
+            return True  # We know we exist because we exist :-)
         callerctx = inspect.currentframe().f_back
         try:
             self.select(path, callerctx)
@@ -236,7 +245,8 @@ class Selectable:
         return True
 
     def is_reference(self, path=None):
-        """ Returns True if path is a possible reference """
+        """ Returns True if path is a possible reference. If path is None,
+        returns True if this Selectable contains a reference. """
         if path is None:
             value = self.value
         else:
@@ -245,7 +255,8 @@ class Selectable:
         return isinstance(value, str) and value.startswith(self.refindicator)
 
     def is_enabled(self, path=None):
-        """ Returns True if path exists and its value is True """
+        """ Returns True if path exists and its value is True. If path is None,
+        returns True if this Selectable is True. """
         if path is None:
             value = self.value
         else:
@@ -256,10 +267,6 @@ class Selectable:
                 return False
 
         return isinstance(value, int) and value != 0
-
-    def _new(self, name, selectable):
-        """ Instantiates a Selectable keeping the same root """
-        return Selectable(name, selectable, self.refindicator, self.root)
 
     def select(self, path, callerctx=None):
         """ Returns a new Selectable based on path """

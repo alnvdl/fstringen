@@ -146,18 +146,24 @@ Or with escapes in a single-line:
     my_fstringsar = f"""*\\\"a\\\"*"""
 
 
-** Don't compare with `is` **
-
+**Don't compare with `is` and avoid `isinstance`**
 When dealing with a `Selectable` or a `Model`, don't use the `is` comparison
 operator. Consider the following code:
 
     mybool = model.select("/path/to/a/bool")
 
 When checking whether `mybool` is `True` or `False`, do it using `==` or if in
-a conditional, just check it directly without a comparison. The same applies
-to `None`.
+a conditional, just check the value directly without a comparison
+(`if mybool`). The same applies to `None`.
 
-The reason for this limitation is that Python does not allow us to subclass
-`None`, `True` and `False`, which are global objects that can't be changed.
-Since `select` always returns a `Selectable`, that `Selectable` can never be
-such a global object, and therefore `is` comparisons will always fail.
+The reason for this limitation is that `select` always returns a `Selectable`,
+and a `Selectable` can never be compared to Python objects using the `is`
+operator, which verifies that two expressions point to the same object.
+However, equality operators (`==` and `!=`) work just fine because `Selectable`
+applies some magic.
+
+Because `NoneType` and `bool` cannot be subclassed in Python, a `Selectable`
+isn't able to inherit from those (as it does for `int`, `str`, `list`, `dict`,
+etc.). For that reason, you should also avoid using `isinstance`. Instead, you
+can verify the original type for a value by checking the `type` attribute in a
+`Selectable`.
