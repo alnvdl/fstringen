@@ -167,3 +167,5 @@ isn't able to inherit from those (as it does for `int`, `str`, `list`, `dict`,
 etc.). For that reason, you should also avoid using `isinstance`. Instead, you
 can verify the original type for a value by checking the `type` attribute in a
 `Selectable`.
+
+# Test PR checks
