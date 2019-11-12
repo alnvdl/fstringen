@@ -125,7 +125,8 @@ Because of Python limitations, a few things are not possible:
 
 **Quotes in fstringstars strings**
 
-Just as you can't have a triple-quoted string like this in Python:
+Just as you can't have a triple-quoted string that starts or ends with quotes
+in Python:
 
     my_str = """"a""""
 
@@ -167,3 +168,22 @@ isn't able to inherit from those (as it does for `int`, `str`, `list`, `dict`,
 etc.). For that reason, you should also avoid using `isinstance`. Instead, you
 can verify the original type for a value by checking the `type` attribute in a
 `Selectable`.
+
+**Variable scoping in list comprehensions**
+List comprehensions have their own frame and local scope in Python 3+, and the
+scope-escaping tricks fstringen uses don't work in them.
+
+So if you have code like this:
+
+    myvar = "myvalue"
+
+    return f"""*
+    ...
+
+    {[do_something(entity, myvar) for entity in model.select("/entities/*")]}
+    *"""
+
+It will not work, because myvar will not be accesible to that list
+comprehension. To work around this, you can either have the list comprehension
+ouside the fstringstar, or directly embed the variable's value in the list
+comprehension expression.

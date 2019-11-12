@@ -1,11 +1,11 @@
 import setuptools
 
 with open("README.md", "r") as f:
-    long_description=f.read()
+    long_description = f.read()
 
 setuptools.setup(
     name="fstringen",
-    version="0.0.7",
+    version="0.0.8",
     author="Allan Vidal",
     description="A text generator based on f-strings",
     long_description=long_description,
