@@ -1,8 +1,10 @@
-import inspect
 import atexit
+import inspect
 import json
 import re
+import sys
 import textwrap
+import traceback
 
 try:
     import yaml
@@ -44,29 +46,96 @@ def _put(obj, indent):
         return str(obj).replace("\n", "\n" + indent)
 
 
-def _fix_fstring(line):
-    line = re.sub(r"(\"\"\"\*\s*)", "\"\"\"", line)
-    line = re.sub(r"(\s*\*\"\"\")", "\"\"\"", line)
-    return line
+def _errmsg(exc_info, fnname, code=None, fstringstar=None):
+    excl = exc_info[0]
+    exc = exc_info[1]
+    tb = exc_info[2]
+
+    lineno = traceback.extract_tb(tb)[-1][1] - 1
+    # If we have precise line information, use it
+    line = traceback.extract_tb(tb)[-1][3]
+    if line:
+        subfn = traceback.extract_tb(tb)[-1][2]
+        return f"""
+Error in function '{subfn}' called by generator '{fnname}':
+{"-"*80}
+Line {lineno + 1}: {line} <- \033[91m{excl.__name__}: {str(exc)}\033[0m
+{"-"*80}
+"""
+
+
+
+    if code is not None:
+        fnlines = code.split("\n")
+        startline = max(lineno - 3, 0)
+        endline = min(lineno + 3, len(fnlines) - 1)
+        try:
+            fnlines[lineno] = (fnlines[lineno] +
+                            f"\033[91m <- {type(exc).__name__}: " +
+                            f"{str(exc)}\033[0m")
+            msg = "\n".join(fnlines[startline:endline])
+            if endline < len(fnlines) - 1:
+                msg += "\n[...]"
+        except IndexError:
+            msg = "Could not determine source location"
+
+        return f"""
+Error in generator '{fnname}':
+{"-"*80}
+{textwrap.dedent(msg)}
+{"-"*80}
+"""
+
+    if fstringstar is not None:
+        return f"""
+Error in fstringstar in generator '{fnname}':
+{"-"*80}
+fstringstar: f\"\"\"*
+{textwrap.dedent(fstringstar).strip()}
+*\"\"\" <- \033[91m{excl.__name__}: {str(exc)}\033[0m
+{"-"*80}
+"""
 
 
 def _compile(fstringstar):
-    globals_ = inspect.currentframe().f_back.f_globals
-    locals_ = inspect.currentframe().f_back.f_locals
+    gen_frame = inspect.currentframe().f_back
+    globals_ = gen_frame.f_globals
+    locals_ = gen_frame.f_locals
 
     fstring = "_fstringstar = f\"\"\"{}\"\"\"".format(_putify(fstringstar))
-
-    exec(fstring, globals_, locals_)
+    try:
+        exec(fstring, globals_, locals_)
+    except Exception:
+        fnname = gen_frame.f_code.co_name
+        msg = _errmsg(sys.exc_info(), fnname, fstringstar=fstringstar)
+        raise FStringenError(msg) from None
 
     output = locals_["_fstringstar"]
     return output
+
+
+_original_excepthook = sys.excepthook
+
+
+def exception_handler(exception_type, exception, traceback):
+    # Traceback is useless, given the distortions we introduce
+    if isinstance(exception, FStringenError):
+        sys.stderr.write(f"{exception_type.__name__}: " +
+                         f"{str(exception).strip()}\n")
+    # For non fstringen-related errors however, traceback may be useful
+    else:
+        _original_excepthook(exception_type, exception, traceback)
+
+
+sys.excepthook = exception_handler
 
 
 def gen(model=None, fname=None, comment=None, notice=True):
     def realgen(fn):
         original_name = fn.__name__
         code = textwrap.dedent(inspect.getsource(fn))
-        newcode = code[1:]  # Remove decorator
+        newcode = "\n".join(code.split("\n")[1:])  # Remove decorator
+        original_code = newcode
         newcode = re.sub(r"(f\"\"\"\*)", "_compile(\"\"\"", newcode)
         newcode = re.sub(r"(\*\"\"\")", "\"\"\")", newcode)
 
@@ -80,7 +149,16 @@ def gen(model=None, fname=None, comment=None, notice=True):
         newgen = locals_[original_name]
 
         def newfn(*args, **kwargs):
-            r = newgen(*args, **kwargs)
+            try:
+                r = newgen(*args, **kwargs)
+            # If the error is already an FStringenError, we have nothing to add
+            except FStringenError as e:
+                raise e from None
+            except Exception:
+                msg = _errmsg(sys.exc_info(), original_name,
+                              code=original_code)
+                raise FStringenError(msg) from None
+
             if r is None:
                 return
             elif isinstance(r, str):
@@ -110,6 +188,7 @@ def gen(model=None, fname=None, comment=None, notice=True):
         # fstringen must not be used in anything else other than generators.
         globals_[original_name] = newfn
 
+        newfn.code = original_code
         return newfn
 
     return realgen
@@ -318,7 +397,7 @@ class Selectable:
 
             if part == "*" and i == len(parts) - 1:
                 if not hasattr(obj, "items"):
-                    raise FStringenError("cannot iterate over '{}'".format(
+                    raise FStringenError("Cannot iterate over '{}'".format(
                         "/".join(curpath[:-1])))
                 elements = tuple(self._new(k, v) for k, v in obj.items())
                 return self._new("*", elements)
@@ -333,16 +412,16 @@ class Selectable:
                         part = int(part)
                     except ValueError:
                         raise FStringenError(
-                            "array navigation requires integers")
+                            "Array navigation requires integers")
                 elif not isinstance(obj, dict):
                     raise FStringenError(
-                            "cannot lookup path '{}' in value '{}'".format(
+                            "Cannot lookup path '{}' in value '{}'".format(
                                 part, str(obj)))
                 try:
                     obj = obj[part]
                 except (KeyError, IndexError):
                     raise FStringenNotFound(
-                        "could not find path '{}' in '{}'".format(
+                        "Could not find path '{}' in '{}'".format(
                             "/".join(curpath), obj))
 
             lastpart = part

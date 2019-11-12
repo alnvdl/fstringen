@@ -62,19 +62,19 @@ class TestModel(unittest.TestCase):
         self.assertEqual(m.select("/week"), test_model["week"])
         self.assertEqual(m.select("/week").type, list)
         self.assertRaisesRegex(FStringenNotFound,
-                               "could not find path '/doesnotexist'.*",
+                               "Could not find path '/doesnotexist'.*",
                                m.select, "/doesnotexist")
         self.assertRaisesRegex(
             FStringenNotFound,
-            "could not find path '/components/componentX'.*", m.select,
+            "Could not find path '/components/componentX'.*", m.select,
             "/components/componentX")
         self.assertRaisesRegex(
             FStringenNotFound,
-            "could not find path '/components/componentB/properties/height'.*",
+            "Could not find path '/components/componentB/properties/height'.*",
             m.select, "/components/componentB/properties/height")
         self.assertRaisesRegex(
             FStringenError,
-            "cannot iterate over '/components/componentB/properties/color'",
+            "Cannot iterate over '/components/componentB/properties/color'",
             m.select, "/components/componentB/properties/color/*")
 
     def test_select_star(self):
@@ -122,7 +122,7 @@ class TestModel(unittest.TestCase):
         self.assertEqual(
             m.select("/components/componentA/properties/nicknames/2"), "A")
         self.assertRaisesRegex(
-            FStringenNotFound, "could not find path " +
+            FStringenNotFound, "Could not find path " +
             "'/components/componentA/properties/nicknames/3'.*", m.select,
             "/components/componentA/properties/nicknames/3")
 
@@ -130,7 +130,7 @@ class TestModel(unittest.TestCase):
         self.assertEqual(m.select("/week/2"), "wed")
         self.assertEqual(m.select("/week/-1"), "fri")
         self.assertRaisesRegex(FStringenError,
-                               "array navigation requires integers",
+                               "Array navigation requires integers",
                                m.select, "/week/a")
 
     def test_select_ref(self):
@@ -150,7 +150,7 @@ class TestModel(unittest.TestCase):
         # Broken path selection
         self.assertRaisesRegex(
             FStringenNotFound,
-            "could not find path '/components/componentX'.*", m.select,
+            "Could not find path '/components/componentX'.*", m.select,
             "/components/componentA/properties/brokenref->")
 
     def test_select_replace(self):
