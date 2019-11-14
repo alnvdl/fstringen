@@ -205,19 +205,45 @@ class TestGen(unittest.TestCase):
 
         self.assertEqual(fn2(), "x\n  1\nsomething\n   .")
 
+    def test_basic_newline_equivalence(self):
+        @gen()
+        def fn1():
+            return f"""*
+            ...
+            *"""
+
+        @gen()
+        def fn2():
+            return f"""*...*"""
+
+        @gen()
+        def fn3():
+            return f"""*
+            ...*"""
+
+        @gen()
+        def fn4():
+            return f"""*...
+            *"""
+
+        self.assertEqual(fn1(), "...")
+        self.assertEqual(fn2(), "...")
+        self.assertEqual(fn3(), "...")
+        self.assertEqual(fn4(), "...")
+
     def test_quotes(self):
         @gen()
         def fn():
             a = 1
-            return f"""
-            "{a}"
-            """
+            return f"""*
+            \\"{a}\\"
+            *"""
         self.assertEqual(fn(), "\"1\"")
 
         @gen()
         def fn2():
             a = 1
-            return f"""\\\"{a}\\\""""
+            return f"""*\\"{a}\\*"""
         self.assertEqual(fn(), "\"1\"")
 
     def test_blank_lines(self):
@@ -293,10 +319,10 @@ class TestGen(unittest.TestCase):
     def test_indent(self):
         @gen()
         def multiline_string():
-            return """
+            return f"""*
             multiline
               string
-            """
+            *"""
 
         # Indentation-level of outside code shouldn't interfere
         @gen()
@@ -385,17 +411,18 @@ class TestIntegration(unittest.TestCase):
 
         @gen()
         def gen_component(component):
-            parent = ""
+            parent = None
             if component.has("properties/parent"):
                 parent = component.select("properties/parent->").name
                 parent = f"parent: {parent}"
 
             return f"""*
             # Component {component.select("properties/name")}:
+              {parent}
               {gen_color(component)}
               nicknames:
                 {["- " + x for x in component.select("properties/nicknames")]}
-              {parent}
+
             *"""
 
         @gen()
@@ -405,6 +432,8 @@ class TestIntegration(unittest.TestCase):
                 for component in model.select("/components/*")
             ]
 
+            print(components)
+
             return f"""*
             {components}
             *"""
@@ -412,6 +441,7 @@ class TestIntegration(unittest.TestCase):
         m = Model.fromDict(test_model, refindicator="$")
         self.assertEqual(
             gen_all(m), """# Component componentA:
+
   color: blue
   nicknames:
     - cA
@@ -419,9 +449,10 @@ class TestIntegration(unittest.TestCase):
     - A
 
 # Component componentB:
+  parent: componentA
   color: red
   nicknames:
     - cB
     - compB
     - B
-  parent: componentA""")
+""")
