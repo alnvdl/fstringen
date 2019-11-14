@@ -37,8 +37,12 @@ def _putify(template):
 
 def _put(obj, indent):
     if isinstance(obj, list) or isinstance(obj, tuple):
-        newobj = [str(el).replace("\n", "\n" + indent)
-                  for el in obj if el is not None]
+        newobj = []
+        for el in obj:
+            if el is None:
+                continue
+            el = textwrap.dedent(str(el)).replace("\n", "\n" + indent)
+            newobj.append(el)
         return ("\n" + indent).join(newobj)
     else:
         if obj is None:
@@ -54,25 +58,22 @@ def _errmsg(exc_info, fnname, code=None, fstringstar=None):
     lineno = traceback.extract_tb(tb)[-1][1] - 1
     # If we have precise line information, use it
     line = traceback.extract_tb(tb)[-1][3]
-    if line:
+    if fstringstar is None and line:
         subfn = traceback.extract_tb(tb)[-1][2]
         return f"""
-Error in function '{subfn}' called by generator '{fnname}':
+Error in function '{subfn}' called (directly or indirectly) by generator '{fnname}':
 {"-"*80}
-Line {lineno + 1}: {line} <- \033[91m{excl.__name__}: {str(exc)}\033[0m
+Line {lineno + 1}: {line} <- {excl.__name__}: {str(exc).strip()}
 {"-"*80}
 """
-
-
-
     if code is not None:
         fnlines = code.split("\n")
         startline = max(lineno - 3, 0)
         endline = min(lineno + 3, len(fnlines) - 1)
         try:
             fnlines[lineno] = (fnlines[lineno] +
-                            f"\033[91m <- {type(exc).__name__}: " +
-                            f"{str(exc)}\033[0m")
+                               f" <- {type(exc).__name__}: " +
+                               f"{str(exc)}")
             msg = "\n".join(fnlines[startline:endline])
             if endline < len(fnlines) - 1:
                 msg += "\n[...]"
@@ -82,19 +83,32 @@ Line {lineno + 1}: {line} <- \033[91m{excl.__name__}: {str(exc)}\033[0m
         return f"""
 Error in generator '{fnname}':
 {"-"*80}
-{textwrap.dedent(msg)}
+{textwrap.dedent(msg).strip()}
 {"-"*80}
 """
 
     if fstringstar is not None:
         return f"""
-Error in fstringstar in generator '{fnname}':
+Error generating fstringstar in generator '{fnname}':
 {"-"*80}
 fstringstar: f\"\"\"*
 {textwrap.dedent(fstringstar).strip()}
-*\"\"\" <- \033[91m{excl.__name__}: {str(exc)}\033[0m
+*\"\"\" <- {excl.__name__}: {str(exc).strip()}
 {"-"*80}
 """
+
+
+def _normalize_whitespace(fstringstar):
+    if fstringstar[0] == "\n":
+        fstringstar = textwrap.dedent(fstringstar)
+        fstringstar = fstringstar[1:]
+
+    lines = fstringstar.split("\n")
+    if len(lines) >= 2 and lines[-1].strip() == "":
+        lines = lines[:-1]
+        fstringstar = "\n".join(lines)
+
+    return fstringstar
 
 
 def _compile(fstringstar):
@@ -102,6 +116,7 @@ def _compile(fstringstar):
     globals_ = gen_frame.f_globals
     locals_ = gen_frame.f_locals
 
+    fstringstar = _normalize_whitespace(fstringstar)
     fstring = "_fstringstar = f\"\"\"{}\"\"\"".format(_putify(fstringstar))
     try:
         exec(fstring, globals_, locals_)
@@ -162,12 +177,7 @@ def gen(model=None, fname=None, comment=None, notice=True):
             if r is None:
                 return
             elif isinstance(r, str):
-                v = textwrap.dedent(r)
-                if len(v) > 0 and v[0] == "\n":
-                    v = v[1:]
-                if len(v) > 0 and v[-1] == "\n":
-                    v = v[:-1]
-                return v
+                return textwrap.dedent(r)
             else:
                 return r
 
