@@ -112,11 +112,40 @@ import is available, `Mapper`, but it's entirely optional. It wraps a
 dictionary for looking up things like type mappings, and it returns alarming
 strings when no match is found.
 
+Fstringstars have one important distiction when compared to regular
+triple-quoted strings: their first and last `\n` are discarded when present.
+Therefore, the following are all equivalent:
+
+    fstringstar = f"""*
+    ...
+    *"""
+
+    fstringstar = f"""*...*"""
+
+    fstringstar = f"""*
+    ...*"""
+
+    fstringstar = f"""*...
+    *"""
+
+This design intentional, especially because it enables the first style shown
+above (newline at the start, newline at the end), which makes generators more
+readable. Avoid using regular triple-quoted strings in generators to keep
+behavior more preditable and consistent.
+
+Also, please note that using single-quotes to define fstringstars is not
+supported (i.e., `f'''*...*'''` is not a valid fstringstar).
+
 ## Caveats
 fstringen does dangerous things with scope and function re-declaration. This
 means you should only use it in scripts that are code generators, and code
 generators alone (i.e., they don't do anything else). We sacrificed correctness
 for neatness and ease-to-use.
+
+Since fstringen tramples over all common sense, pretty much all exceptions are
+intercepted and transformed into custom error messages. Otherwise, because of
+the scope tricks and function re-declarations, most tracebacks and error
+messages become useless and confusing.
 
 Python 3.6+ is required. PyYAML is an optional dependency.
 
@@ -132,22 +161,16 @@ in Python:
 
 You can't have a fstringstar like this:
 
-    my_fstringsar = f"""*"a"*"""
+    my_fstringstar = f"""*"a"*"""
 
 That's because Python can't figure out how that string starts or ends
 (fstringstars are compiled to triple-quoted Python f-strings). You achieve the
-same result in two different ways. Using line breaks:
+same result by escaping quotes with `//` when they start or end a string:
 
-    my_fstringsar = f"""*
-    "a"
-    *"""
-
-Or with escapes in a single-line:
-
-    my_fstringsar = f"""*\\\"a\\\"*"""
-
+    my_fstringstar = f"""*\\"a\\"*"""
 
 **Don't compare with `is` and avoid `isinstance`**
+
 When dealing with a `Selectable` or a `Model`, don't use the `is` comparison
 operator. Consider the following code:
 
@@ -170,6 +193,7 @@ can verify the original type for a value by checking the `type` attribute in a
 `Selectable`.
 
 **Variable scoping in list comprehensions**
+
 List comprehensions have their own frame and local scope in Python 3+, and the
 scope-escaping tricks fstringen uses don't work in them.
 
