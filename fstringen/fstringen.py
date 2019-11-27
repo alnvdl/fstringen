@@ -58,10 +58,11 @@ def _errmsg(exc_info, fnname, code=None, fstringstar=None):
     lineno = traceback.extract_tb(tb)[-1][1] - 1
     # If we have precise line information, use it
     line = traceback.extract_tb(tb)[-1][3]
-    if fstringstar is None and line:
+    if fstringstar is None and code is None and line:
         subfn = traceback.extract_tb(tb)[-1][2]
         return f"""
-Error in function '{subfn}' called (directly or indirectly) by generator '{fnname}':
+Error in function '{subfn}' called (directly or indirectly) by
+generator '{fnname}':
 {"-"*80}
 Line {lineno + 1}: {line} <- {excl.__name__}: {str(exc).strip()}
 {"-"*80}
@@ -78,7 +79,8 @@ Line {lineno + 1}: {line} <- {excl.__name__}: {str(exc).strip()}
             if endline < len(fnlines) - 1:
                 msg += "\n[...]"
         except IndexError:
-            msg = "Could not determine source location"
+            msg = ("[Could not determine source code location]\n" +
+                   f"{type(exc).__name__}: {str(exc)}")
 
         return f"""
 Error in generator '{fnname}':
@@ -227,7 +229,7 @@ class FStringenError(Exception):
     pass
 
 
-class FStringenNotFound(FStringenError):
+class SelectableError(Exception):
     pass
 
 
@@ -303,7 +305,7 @@ class Selectable:
     def fromYAML(fname, refindicator="#", root=None):
         """ Loads a Selectable from a YAML file. """
         if yaml is None:
-            raise FStringenError("Cannot find 'yaml' module")
+            raise SelectableError("Cannot find 'yaml' module")
         return Selectable(fname,
                           yaml.load(open(fname, "r").read(),
                                     Loader=yaml.Loader),
@@ -328,7 +330,7 @@ class Selectable:
         callerctx = inspect.currentframe().f_back
         try:
             self.select(path, callerctx)
-        except FStringenNotFound:
+        except SelectableError:
             return False
 
         return True
@@ -352,7 +354,7 @@ class Selectable:
             try:
                 callerctx = inspect.currentframe().f_back
                 value = self.select(path, callerctx)
-            except FStringenError:
+            except SelectableError:
                 return False
 
         return isinstance(value, int) and value != 0
@@ -392,13 +394,13 @@ class Selectable:
             if match is not None and match.lastindex == 1:
                 var = match[1]
                 if not var.isidentifier():
-                    raise FStringenError(
+                    raise SelectableError(
                         "'{}' is not a valid Python identifier".format(var))
                 if var in callerctx.f_locals:
                     part = str(callerctx.f_locals[var])
                     curpath.append("<{}>".format(part))
                 else:
-                    raise FStringenError(
+                    raise SelectableError(
                         "Could not find '{}' in local scope".format(var))
                 if part.startswith(self.refindicator):
                     return self.select(part[1:], callerctx)
@@ -407,7 +409,7 @@ class Selectable:
 
             if part == "*" and i == len(parts) - 1:
                 if not hasattr(obj, "items"):
-                    raise FStringenError("Cannot iterate over '{}'".format(
+                    raise SelectableError("Cannot iterate over '{}'".format(
                         "/".join(curpath[:-1])))
                 elements = tuple(self._new(k, v) for k, v in obj.items())
                 return self._new("*", elements)
@@ -421,16 +423,16 @@ class Selectable:
                     try:
                         part = int(part)
                     except ValueError:
-                        raise FStringenError(
+                        raise SelectableError(
                             "Array navigation requires integers")
                 elif not isinstance(obj, dict):
-                    raise FStringenError(
+                    raise SelectableError(
                             "Cannot lookup path '{}' in value '{}'".format(
                                 part, str(obj)))
                 try:
                     obj = obj[part]
                 except (KeyError, IndexError):
-                    raise FStringenNotFound(
+                    raise SelectableError(
                         "Could not find path '{}' in '{}'".format(
                             "/".join(curpath), obj))
 
