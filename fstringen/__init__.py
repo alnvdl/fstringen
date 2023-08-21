@@ -1,2 +1,2 @@
-from fstringen.fstringen import gen, Selectable, Model, Mapper, \
-    FStringenError, SelectableError
+from fstringen.fstringen import gen, Selectable, Model, FStringenError, \
+    SelectableError

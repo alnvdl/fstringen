@@ -233,19 +233,6 @@ class SelectableError(Exception):
     pass
 
 
-class Mapper:
-    def __init__(self, name, mappings):
-        self.name = name
-        self.mappings = mappings
-
-    def __getitem__(self, key):
-        return self.get(key)
-
-    def get(self, key):
-        return self.mappings.get(
-            key, "<! MAPPING NOT FOUND IN '{}': {} !>".format(self.name, key))
-
-
 def is_enumerable(obj):
     try:
         enumerate(obj)

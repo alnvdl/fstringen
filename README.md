@@ -112,10 +112,7 @@ is usually used when referring to a `Selectable` loaded from a file):
     `Selectable`.
   - `is_enabled` method verifies that the path exists and has a truthy value.
 
-The two main imports from `fstringen` are `gen` and `Model`. An additional
-import is available, `Mapper`, but it's entirely optional. It wraps a
-dictionary for looking up things like type mappings, and it returns alarming
-strings when no match is found.
+The two most commonly used imports from `fstringen` are `gen` and `Model`.
 
 Fstringstars have one important distiction when compared to regular
 triple-quoted strings: their first and last `\n` are discarded when present.
