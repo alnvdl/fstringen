@@ -481,8 +481,6 @@ class TestIntegration(unittest.TestCase):
                 for component in model.select("/components/*")
             ]
 
-            print(components)
-
             return f"""*
             {components}
             *"""
