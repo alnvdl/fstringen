@@ -28,8 +28,8 @@ test_model = {
     },
     "week": ["mon", "tue", "wed", "thu", "fri"],
     "animals": [
-        {"type": "whale", "environment": "ocean"},
-        {"type": "lion", "environment": "land"},
+        {"type": "whale", "environment": "ocean", "other": "$/animals/1"},
+        {"type": "lion", "environment": "land", "other": "$/animals/0"},
     ],
 }
 
@@ -157,47 +157,41 @@ class TestModel(unittest.TestCase):
                          test_model["animals"][0]["type"][2])
 
         self.assertRaisesRegex(SelectableError,
-                               "Could not find path '/animals/99' in " +
-                               "'\\[\\{'type': 'whale', " +
-                               "'environment': 'ocean'\\}, " +
-                               "\\{'type': 'lion', " +
-                               "'environment': 'land'\\}\\]'",
+                               "Could not find path '/animals/99' in '.*'",
                                m.select, "/animals/99")
 
     def test_select_ref(self):
         m = Model.fromDict(test_model, refindicator="$")
         self.assertEqual(m.select("/components/componentB/properties/parent"),
                          "$/components/componentA")
+
+        # Go to ref as value.
         self.assertEqual(
             m.select("/components/componentB/properties/parent->"),
             test_model["components"]["componentA"])
+        self.assertEqual(
+            m.select("/components/componentB/properties/parent->" +
+                     "/properties/color"),
+            "blue")
+        self.assertEqual(
+            m.select("$/animals/1/other->/type"),
+            "whale")
+
+        # Go to ref.
         ref = m.select("/components/componentB/properties/parent") # noqa
         self.assertEqual(
-            m.select("<ref>->"),
+            m.select(f"{ref}->"),
             test_model["components"]["componentA"])
+
         # Relative path seletion
         rref = m.select("/components/componentB/favoriteprop->")
         self.assertEqual(rref, "red")
+
         # Broken path selection
         self.assertRaisesRegex(
             SelectableError,
             "Could not find path '/components/componentX'.*", m.select,
             "/components/componentA/properties/brokenref->")
-
-    def test_select_replace(self):
-        comp = "componentA" # noqa
-        prop = "color" # noqa
-        m = Model.fromDict(test_model)
-        self.assertEqual(m.select("/components/<comp>/properties/<prop>"),
-                         "blue")
-        # We cannot use assertRaisesRegex because of the scope trickery in
-        # select with paths containing <...>
-        try:
-            m.select("/components/<comp>/properties/<fail>")
-        except SelectableError as e:
-            self.assertEqual(str(e), "Could not find 'fail' in local scope")
-        else:
-            raise Exception("test_select_replace_failed")
 
     def test_select_default(self):
         m = Model.fromDict(test_model)

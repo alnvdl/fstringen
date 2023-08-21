@@ -293,7 +293,7 @@ class Selectable:
         # See: https://docs.python.org/3/library/functions.html#type
         newcls = type(cls.__name__, (type(value),), methods)
         obj = newcls(value)
-        # Initialize non-value attributes.
+        # Initialize Selectable attributes.
         obj._initSelectable(name, original_type, refindicator, root)
         return obj
 
@@ -384,47 +384,28 @@ class Selectable:
             callerctx = inspect.currentframe().f_back
 
         obj = self.value
-        root = False
+        name = None
+        curpath = []
+
         # Ignore ref indicators and browse accordingly.
         if path.startswith(self.refindicator):
             path = path[1:]
+            if path.endswith("->"):
+                path = path[:-2]
+                return self._select(path, default)
         # When an absolute path is used in a query, revert to the root.
         if path.startswith("/"):
             path = path[1:]
             obj = self.root
-            root = True
+            curpath.append("")
         # Empty path trailings are ignored.
         if path.endswith("/"):
             path = path[:-1]
 
         parts = path.split("/")
-        curpath = []
-        if root:
-            curpath.append("")
-
-        lastpart = None
-
         for i in range(len(parts)):
             part = parts[i]
-
-            # Replace <variables> with their values.
-            match = re.match(r"\<([^<>]*)\>", part)
-            if match is not None and match.lastindex == 1:
-                var = match[1]
-                if not var.isidentifier():
-                    raise SelectableError(
-                        "'{}' is not a valid Python identifier".format(var))
-                if var in callerctx.f_locals:
-                    part = str(callerctx.f_locals[var])
-                    curpath.append("<{}>".format(part))
-                else:
-                    raise SelectableError(
-                        "Could not find '{}' in local scope".format(var))
-                if part.startswith(self.refindicator):
-                    return self._select(part[1:], callerctx, default)
-            else:
-                curpath.append(part)
-
+            curpath.append(part)
             if part == "*" and i == len(parts) - 1:
                 if isinstance(obj, dict):
                     elements = tuple(self._new(k, v) for k, v in obj.items())
@@ -434,12 +415,14 @@ class Selectable:
                 else:
                     raise SelectableError("Cannot iterate over '{}'"
                                           .format("/".join(curpath[:-1])))
-                return self._new("*", elements)
+                obj = elements
+                name = "*"
             elif part.endswith("->"):
                 part = part[:-2]
                 newpath = obj[part]
                 newselectable = self._new(part, obj)
-                return newselectable._select(newpath, callerctx, default)
+                obj = newselectable._select(newpath, callerctx, default)
+                name = obj.name
             else:
                 try:
                     obj = obj[part]
@@ -457,19 +440,20 @@ class Selectable:
                         obj = obj[part]
                     except IndexError:
                         if default is not None:
-                            return default
+                            obj = default
+                            break
                         raise SelectableError(
                             "Could not find path '{}' in '{}'"
                             .format("/".join(curpath), obj))
                 except KeyError:
                     if default is not None:
-                        return default
+                        obj = default
+                        break
                     raise SelectableError("Could not find path '{}' in '{}'"
                                           .format("/".join(curpath), obj))
+                name = part
 
-            lastpart = part
-
-        return self._new(lastpart, obj)
+        return self._new(name, obj)
 
 
 Model = Selectable
