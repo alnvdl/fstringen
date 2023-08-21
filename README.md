@@ -90,12 +90,17 @@ easy selection of data (`Model` is just an alias for `Selectable`, and `Model`
 is usually used when referring to a `Selectable` loaded from a file):
 
 - Every `Selectable` has the `select` method, which takes a `path` and returns
-  a new `Selectable` based on the query that path indicates.
+  a new `Selectable` based on the query that path indicates. Optionally, a
+  `default` value can be passed to `select` for returning when select fails to
+  find something.
+- Calling a `Selectable` is a shorthand for `Selectable.select`. In other
+  words, `myobj("/path")` is the same as `myobj.select("/path")`.
 - Every `Selectable` has a `name` attribute, corresponding to the dictionary
   key or array index for that element.
-- If a path ends with `/*` and the preceding path contains a dictionary,
-  a `Selectable` list of `Selectable`s is returned, containing all items in
-  that dictionary.
+- If a path ends with `/*` and the preceding path contains a dictionary or
+  enumerable value, a `Selectable` list of `Selectable`s is returned,
+  containing all items in that dictionary (as key, value) or enumerable (as
+  index, value).
 - If a path element ends with `->`, the value contained in that attribute is
   assumed to contain a path (absolute or relative), and that path is used to
   look up the referenced object in the same `Model`.

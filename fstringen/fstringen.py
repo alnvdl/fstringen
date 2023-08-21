@@ -7,7 +7,7 @@ import textwrap
 import traceback
 
 try:
-    import yaml
+    import yaml  # type: ignore
 except ImportError:
     yaml = None
 
@@ -195,7 +195,7 @@ def gen(model=None, fname=None, comment=None, notice=True):
                 "model": model
             }
 
-        # Put the new function in globals, so others @gen code can call it
+        # Put the new function in globals, so other @gen code can call it.
         # This is obviously dangerous, and it's one of the the reasons why
         # fstringen must not be used in anything else other than generators.
         globals_[original_name] = newfn
@@ -206,7 +206,7 @@ def gen(model=None, fname=None, comment=None, notice=True):
     return realgen
 
 
-_output = {}
+_output = {}  # type: ignore
 
 
 def _generate_all():
@@ -246,17 +246,26 @@ class Mapper:
             key, "<! MAPPING NOT FOUND IN '{}': {} !>".format(self.name, key))
 
 
+def is_enumerable(obj):
+    try:
+        enumerate(obj)
+    except TypeError:
+        return False
+    else:
+        return True
+
+
 class Selectable:
     def __new__(cls, name, value, refindicator="#", root=None):
-        # Pick Selectable methods that should be used
+        # Pick Selectable methods that should be used.
         methods = {}
         for method in cls.__dict__:
-            if not method.startswith("__"):
+            if not method.startswith("__") or method == "__call__":
                 methods[method] = cls.__dict__[method]
 
         original_type = type(value)
-        # Python does not allow subclassing bool, so we use an adapted int
-        if type(value) == bool:
+        # Python does not allow subclassing bool, so we use an adapted int.
+        if isinstance(value, bool):
             value = int(value)
 
             def custom_repr_str(this):
@@ -265,7 +274,7 @@ class Selectable:
             methods["__repr__"] = custom_repr_str
             methods["__str__"] = custom_repr_str
 
-        # None cannot be subclassed either, use an empty string instead
+        # None cannot be subclassed either, use an empty string instead.
         elif value is None:
             value = ""
 
@@ -279,11 +288,12 @@ class Selectable:
             methods["__str__"] = custom_repr_str
             methods["__eq__"] = custom_eq
 
-        # New type will be a subclass of the value type, with the extra methods
-        # defined in Selectable
+        # Create a dynamic class based on the original type of the value, but
+        # including methods from Selectable.
+        # See: https://docs.python.org/3/library/functions.html#type
         newcls = type(cls.__name__, (type(value),), methods)
         obj = newcls(value)
-        # Initialize non-value attributes
+        # Initialize non-value attributes.
         obj._initSelectable(name, original_type, refindicator, root)
         return obj
 
@@ -329,7 +339,7 @@ class Selectable:
             return True  # We know we exist because we exist :-)
         callerctx = inspect.currentframe().f_back
         try:
-            self.select(path, callerctx)
+            self._select(path, callerctx)
         except SelectableError:
             return False
 
@@ -342,7 +352,7 @@ class Selectable:
             value = self.value
         else:
             callerctx = inspect.currentframe().f_back
-            value = self.select(path, callerctx)
+            value = self._select(path, callerctx)
         return isinstance(value, str) and value.startswith(self.refindicator)
 
     def is_enabled(self, path=None):
@@ -353,29 +363,37 @@ class Selectable:
         else:
             try:
                 callerctx = inspect.currentframe().f_back
-                value = self.select(path, callerctx)
+                value = self._select(path, callerctx)
             except SelectableError:
                 return False
 
         return isinstance(value, int) and value != 0
 
-    def select(self, path, callerctx=None):
-        """ Returns a new Selectable based on path """
+    def __call__(self, path, default=None):
+        """ __call__ enables a shorthand for calling select. """
+        callerctx = inspect.currentframe().f_back
+        return self._select(path, callerctx, default)
 
+    def select(self, path, default=None):
+        """ Returns a new Selectable based on path. """
+        callerctx = inspect.currentframe().f_back
+        return self._select(path, callerctx, default)
+
+    def _select(self, path, callerctx=None, default=None):
         if callerctx is None:
             callerctx = inspect.currentframe().f_back
 
         obj = self.value
         root = False
-        # Ignore ref indicators and browse accordingly
+        # Ignore ref indicators and browse accordingly.
         if path.startswith(self.refindicator):
             path = path[1:]
-        # When an absolute path is used in a query, revert to the root
+        # When an absolute path is used in a query, revert to the root.
         if path.startswith("/"):
             path = path[1:]
             obj = self.root
             root = True
-        # Empty path trailings are ignored
+        # Empty path trailings are ignored.
         if path.endswith("/"):
             path = path[:-1]
 
@@ -389,7 +407,7 @@ class Selectable:
         for i in range(len(parts)):
             part = parts[i]
 
-            # Replace <variables> with their values
+            # Replace <variables> with their values.
             match = re.match(r"\<([^<>]*)\>", part)
             if match is not None and match.lastindex == 1:
                 var = match[1]
@@ -403,38 +421,51 @@ class Selectable:
                     raise SelectableError(
                         "Could not find '{}' in local scope".format(var))
                 if part.startswith(self.refindicator):
-                    return self.select(part[1:], callerctx)
+                    return self._select(part[1:], callerctx, default)
             else:
                 curpath.append(part)
 
             if part == "*" and i == len(parts) - 1:
-                if not hasattr(obj, "items"):
-                    raise SelectableError("Cannot iterate over '{}'".format(
-                        "/".join(curpath[:-1])))
-                elements = tuple(self._new(k, v) for k, v in obj.items())
+                if isinstance(obj, dict):
+                    elements = tuple(self._new(k, v) for k, v in obj.items())
+                elif is_enumerable(obj):
+                    elements = type(obj)(self._new(str(i), v) for i, v in
+                                         enumerate(obj))
+                else:
+                    raise SelectableError("Cannot iterate over '{}'"
+                                          .format("/".join(curpath[:-1])))
                 return self._new("*", elements)
             elif part.endswith("->"):
                 part = part[:-2]
                 newpath = obj[part]
                 newselectable = self._new(part, obj)
-                return newselectable.select(newpath, callerctx)
+                return newselectable._select(newpath, callerctx, default)
             else:
-                if isinstance(obj, list) or isinstance(obj, tuple):
+                try:
+                    obj = obj[part]
+                except TypeError:
+                    if not is_enumerable(obj):
+                        raise SelectableError(
+                            "Cannot lookup path '{}' in value '{}'".format(
+                                part, str(obj)))
                     try:
                         part = int(part)
                     except ValueError:
                         raise SelectableError(
-                            "Array navigation requires integers")
-                elif not isinstance(obj, dict):
-                    raise SelectableError(
-                            "Cannot lookup path '{}' in value '{}'".format(
-                                part, str(obj)))
-                try:
-                    obj = obj[part]
-                except (KeyError, IndexError):
-                    raise SelectableError(
-                        "Could not find path '{}' in '{}'".format(
-                            "/".join(curpath), obj))
+                            "Enumerable navigation requires integers")
+                    try:
+                        obj = obj[part]
+                    except IndexError:
+                        if default is not None:
+                            return default
+                        raise SelectableError(
+                            "Could not find path '{}' in '{}'"
+                            .format("/".join(curpath), obj))
+                except KeyError:
+                    if default is not None:
+                        return default
+                    raise SelectableError("Could not find path '{}' in '{}'"
+                                          .format("/".join(curpath), obj))
 
             lastpart = part
 

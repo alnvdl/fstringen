@@ -1,5 +1,5 @@
 import unittest
-from fstringen import gen, Model, FStringenError, SelectableError
+from fstringen import gen, Model, SelectableError
 
 test_model = {
     "components": {
@@ -26,7 +26,11 @@ test_model = {
             }
         }
     },
-    "week": ["mon", "tue", "wed", "thu", "fri"]
+    "week": ["mon", "tue", "wed", "thu", "fri"],
+    "animals": [
+        {"type": "whale", "environment": "ocean"},
+        {"type": "lion", "environment": "land"},
+    ],
 }
 
 
@@ -74,8 +78,12 @@ class TestModel(unittest.TestCase):
             m.select, "/components/componentB/properties/height")
         self.assertRaisesRegex(
             SelectableError,
-            "Cannot iterate over '/components/componentB/properties/color'",
-            m.select, "/components/componentB/properties/color/*")
+            "Cannot iterate over '/components/componentB/properties/dead'",
+            m.select, "/components/componentB/properties/dead/*")
+        self.assertRaisesRegex(
+            SelectableError,
+            "Cannot lookup path 'type' in value 'True'",
+            m.select, "/components/componentB/properties/dead/type")
 
     def test_select_star(self):
         m = Model.fromDict(test_model)
@@ -130,8 +138,31 @@ class TestModel(unittest.TestCase):
         self.assertEqual(m.select("/week/2"), "wed")
         self.assertEqual(m.select("/week/-1"), "fri")
         self.assertRaisesRegex(SelectableError,
-                               "Array navigation requires integers",
+                               "Enumerable navigation requires integers",
                                m.select, "/week/a")
+
+        self.assertEqual(m.select("/animals"), test_model["animals"])
+        self.assertEqual(m.select("/animals/*"), test_model["animals"])
+
+        self.assertEqual(m.select("/animals/0"), test_model["animals"][0])
+        self.assertEqual(m.select("/animals/1"), test_model["animals"][1])
+        self.assertEqual(m.select("/animals/-1"), test_model["animals"][-1])
+
+        self.assertEqual(m.select("/animals/0").select("type"), "whale")
+
+        self.assertEqual(m.select("/animals/0/type"),
+                         test_model["animals"][0]["type"])
+        # Can select individual chars in strings.
+        self.assertEqual(m.select("/animals/0/type/2"),
+                         test_model["animals"][0]["type"][2])
+
+        self.assertRaisesRegex(SelectableError,
+                               "Could not find path '/animals/99' in " +
+                               "'\\[\\{'type': 'whale', " +
+                               "'environment': 'ocean'\\}, " +
+                               "\\{'type': 'lion', " +
+                               "'environment': 'land'\\}\\]'",
+                               m.select, "/animals/99")
 
     def test_select_ref(self):
         m = Model.fromDict(test_model, refindicator="$")
@@ -167,6 +198,30 @@ class TestModel(unittest.TestCase):
             self.assertEqual(str(e), "Could not find 'fail' in local scope")
         else:
             raise Exception("test_select_replace_failed")
+
+    def test_select_default(self):
+        m = Model.fromDict(test_model)
+        self.assertRaisesRegex(SelectableError, "Could not find path .*",
+                               m.select, "attr")
+        self.assertEqual(m.select("attr", "default value"), "default value")
+
+        self.assertRaisesRegex(SelectableError, "Could not find path .*",
+                               m.select, "/components/componentZ")
+        self.assertEqual(m.select("/components/componentZ", [1, 2]), [1, 2])
+
+        self.assertRaisesRegex(SelectableError, "Could not find path .*",
+                               m.select, "/animals/99")
+        self.assertEqual(m.select("/animals/99", "not found"), "not found")
+
+        self.assertRaisesRegex(SelectableError, "Could not find path .*",
+                               m.select, "/animals/1/type/120")
+        self.assertEqual(m.select("/animals/1/type/120", "x"), "x")
+
+    def test_select_call(self):
+        m = Model.fromDict(test_model)
+        self.assertRaisesRegex(SelectableError, "Could not find path .*",
+                               m, "attr")
+        self.assertEqual(m("attr", "default value"), "default value")
 
 
 class TestGen(unittest.TestCase):
@@ -210,21 +265,21 @@ class TestGen(unittest.TestCase):
         def fn1():
             return f"""*
             ...
-            *"""
+            *""" # noqa
 
         @gen()
         def fn2():
-            return f"""*...*"""
+            return f"""*...*""" # noqa
 
         @gen()
         def fn3():
             return f"""*
-            ...*"""
+            ...*""" # noqa
 
         @gen()
         def fn4():
             return f"""*...
-            *"""
+            *""" # noqa
 
         self.assertEqual(fn1(), "...")
         self.assertEqual(fn2(), "...")
@@ -322,7 +377,7 @@ class TestGen(unittest.TestCase):
             return f"""*
             multiline
               string
-            *"""
+            *""" # noqa
 
         # Indentation-level of outside code shouldn't interfere
         @gen()
