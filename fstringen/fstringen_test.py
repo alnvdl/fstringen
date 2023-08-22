@@ -1,5 +1,5 @@
 import unittest
-from fstringen import gen, Model, SelectableError
+from fstringen import gen, Model, ModelError
 
 test_model = {
     "components": {
@@ -65,23 +65,23 @@ class TestModel(unittest.TestCase):
         )
         self.assertEqual(m.select("/week"), test_model["week"])
         self.assertEqual(m.select("/week").type, list)
-        self.assertRaisesRegex(SelectableError,
+        self.assertRaisesRegex(ModelError,
                                "Could not find path '/doesnotexist'.*",
                                m.select, "/doesnotexist")
         self.assertRaisesRegex(
-            SelectableError,
+            ModelError,
             "Could not find path '/components/componentX'.*", m.select,
             "/components/componentX")
         self.assertRaisesRegex(
-            SelectableError,
+            ModelError,
             "Could not find path '/components/componentB/properties/height'.*",
             m.select, "/components/componentB/properties/height")
         self.assertRaisesRegex(
-            SelectableError,
+            ModelError,
             "Cannot iterate over '/components/componentB/properties/dead'",
             m.select, "/components/componentB/properties/dead/*")
         self.assertRaisesRegex(
-            SelectableError,
+            ModelError,
             "Cannot lookup path 'type' in value 'True'",
             m.select, "/components/componentB/properties/dead/type")
 
@@ -93,7 +93,7 @@ class TestModel(unittest.TestCase):
              test_model["components"]["componentB"]))
         self.assertEqual(m.select("/components/*").name, "*")
         self.assertEqual(m.select("/components/*").type, tuple)
-        # Selectables have extra attributes, check those
+        # Models have extra attributes, check those.
         self.assertEqual(
             [el.name for el in m.select("/components/*")],
             ["componentA", "componentB"])
@@ -130,14 +130,14 @@ class TestModel(unittest.TestCase):
         self.assertEqual(
             m.select("/components/componentA/properties/nicknames/2"), "A")
         self.assertRaisesRegex(
-            SelectableError, "Could not find path " +
+            ModelError, "Could not find path " +
             "'/components/componentA/properties/nicknames/3'.*", m.select,
             "/components/componentA/properties/nicknames/3")
 
         self.assertEqual(m.select("/week/0"), "mon")
         self.assertEqual(m.select("/week/2"), "wed")
         self.assertEqual(m.select("/week/-1"), "fri")
-        self.assertRaisesRegex(SelectableError,
+        self.assertRaisesRegex(ModelError,
                                "Enumerable navigation requires integers",
                                m.select, "/week/a")
 
@@ -156,7 +156,7 @@ class TestModel(unittest.TestCase):
         self.assertEqual(m.select("/animals/0/type/2"),
                          test_model["animals"][0]["type"][2])
 
-        self.assertRaisesRegex(SelectableError,
+        self.assertRaisesRegex(ModelError,
                                "Could not find path '/animals/99' in '.*'",
                                m.select, "/animals/99")
 
@@ -189,31 +189,31 @@ class TestModel(unittest.TestCase):
 
         # Broken path selection
         self.assertRaisesRegex(
-            SelectableError,
+            ModelError,
             "Could not find path '/components/componentX'.*", m.select,
             "/components/componentA/properties/brokenref->")
 
     def test_select_default(self):
         m = Model.fromDict(test_model)
-        self.assertRaisesRegex(SelectableError, "Could not find path .*",
+        self.assertRaisesRegex(ModelError, "Could not find path .*",
                                m.select, "attr")
         self.assertEqual(m.select("attr", "default value"), "default value")
 
-        self.assertRaisesRegex(SelectableError, "Could not find path .*",
+        self.assertRaisesRegex(ModelError, "Could not find path .*",
                                m.select, "/components/componentZ")
         self.assertEqual(m.select("/components/componentZ", [1, 2]), [1, 2])
 
-        self.assertRaisesRegex(SelectableError, "Could not find path .*",
+        self.assertRaisesRegex(ModelError, "Could not find path .*",
                                m.select, "/animals/99")
         self.assertEqual(m.select("/animals/99", "not found"), "not found")
 
-        self.assertRaisesRegex(SelectableError, "Could not find path .*",
+        self.assertRaisesRegex(ModelError, "Could not find path .*",
                                m.select, "/animals/1/type/120")
         self.assertEqual(m.select("/animals/1/type/120", "x"), "x")
 
     def test_select_call(self):
         m = Model.fromDict(test_model)
-        self.assertRaisesRegex(SelectableError, "Could not find path .*",
+        self.assertRaisesRegex(ModelError, "Could not find path .*",
                                m, "attr")
         self.assertEqual(m("attr", "default value"), "default value")
 

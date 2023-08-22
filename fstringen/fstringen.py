@@ -229,7 +229,7 @@ class FStringenError(Exception):
     pass
 
 
-class SelectableError(Exception):
+class ModelError(Exception):
     pass
 
 
@@ -242,9 +242,9 @@ def is_enumerable(obj):
         return True
 
 
-class Selectable:
+class Model:
     def __new__(cls, name, value, refindicator="#", root=None):
-        # Pick Selectable methods that should be used.
+        # Pick Model methods that should be used.
         methods = {}
         for method in cls.__dict__:
             if not method.startswith("__") or method == "__call__":
@@ -276,16 +276,16 @@ class Selectable:
             methods["__eq__"] = custom_eq
 
         # Create a dynamic class based on the original type of the value, but
-        # including methods from Selectable.
+        # including methods from Model.
         # See: https://docs.python.org/3/library/functions.html#type
         newcls = type(cls.__name__, (type(value),), methods)
         obj = newcls(value)
-        # Initialize Selectable attributes.
-        obj._initSelectable(name, original_type, refindicator, root)
+        # Initialize Model attributes.
+        obj._initModel(name, original_type, refindicator, root)
         return obj
 
-    def _initSelectable(self, name, original_type, refindicator, root):
-        """ Sets internal Selectable values """
+    def _initModel(self, name, original_type, refindicator, root):
+        """ Sets internal Model values """
         self.name = name
         self.value = self
         self.type = original_type
@@ -294,47 +294,49 @@ class Selectable:
         if self.root is None:
             self.root = self.value
 
-    def _new(self, name, selectable):
-        """ Instantiates a Selectable keeping the same root. """
-        return Selectable(name, selectable, self.refindicator, self.root)
+    def _new(self, name, model):
+        """ Instantiates a Model keeping the same root. """
+        return Model(name, model, self.refindicator, self.root)
 
     @staticmethod
     def fromYAML(fname, refindicator="#", root=None):
-        """ Loads a Selectable from a YAML file. """
+        """ Loads a Model from a YAML file. """
         if yaml is None:
-            raise SelectableError("Cannot find 'yaml' module")
-        return Selectable(fname,
-                          yaml.load(open(fname, "r").read(),
-                                    Loader=yaml.Loader),
-                          refindicator, root)
+            raise ModelError("Cannot find 'yaml' module")
+        return Model(fname,
+                     yaml.load(open(fname, "r").read(), Loader=yaml.Loader),
+                     refindicator,
+                     root)
 
     @staticmethod
     def fromJSON(fname, refindicator="#", root=None):
-        """ Loads a Selectable from a JSON file. """
-        return Selectable(fname, json.loads(open(fname, "r").read()),
-                          refindicator, root)
+        """ Loads a Model from a JSON file. """
+        return Model(fname,
+                     json.loads(open(fname, "r").read()),
+                     refindicator,
+                     root)
 
     @staticmethod
     def fromDict(dict_, name="dict", refindicator="#", root=None):
-        """ Loads a Selectable from a Python dictionary. """
-        return Selectable(name, dict_, refindicator, root)
+        """ Loads a Model from a Python dictionary. """
+        return Model(name, dict_, refindicator, root)
 
     def has(self, path=None):
-        """ Returns True if path exists in the Selectable. If path is None,
-        returns True. """
+        """ Returns True if path exists in the Model. If path is None, returns
+        True. """
         if path is None:
             return True  # We know we exist because we exist :-)
         callerctx = inspect.currentframe().f_back
         try:
             self._select(path, callerctx)
-        except SelectableError:
+        except ModelError:
             return False
 
         return True
 
     def is_reference(self, path=None):
         """ Returns True if path is a possible reference. If path is None,
-        returns True if this Selectable contains a reference. """
+        returns True if this Model contains a reference. """
         if path is None:
             value = self.value
         else:
@@ -344,14 +346,14 @@ class Selectable:
 
     def is_enabled(self, path=None):
         """ Returns True if path exists and its value is True. If path is None,
-        returns True if this Selectable is True. """
+        returns True if this Model is True. """
         if path is None:
             value = self.value
         else:
             try:
                 callerctx = inspect.currentframe().f_back
                 value = self._select(path, callerctx)
-            except SelectableError:
+            except ModelError:
                 return False
 
         return isinstance(value, int) and value != 0
@@ -362,7 +364,7 @@ class Selectable:
         return self._select(path, callerctx, default)
 
     def select(self, path, default=None):
-        """ Returns a new Selectable based on path. """
+        """ Returns a new Model based on path. """
         callerctx = inspect.currentframe().f_back
         return self._select(path, callerctx, default)
 
@@ -400,28 +402,28 @@ class Selectable:
                     elements = type(obj)(self._new(str(i), v) for i, v in
                                          enumerate(obj))
                 else:
-                    raise SelectableError("Cannot iterate over '{}'"
-                                          .format("/".join(curpath[:-1])))
+                    raise ModelError("Cannot iterate over '{}'"
+                                     .format("/".join(curpath[:-1])))
                 obj = elements
                 name = "*"
             elif part.endswith("->"):
                 part = part[:-2]
                 newpath = obj[part]
-                newselectable = self._new(part, obj)
-                obj = newselectable._select(newpath, callerctx, default)
+                newmodel = self._new(part, obj)
+                obj = newmodel._select(newpath, callerctx, default)
                 name = obj.name
             else:
                 try:
                     obj = obj[part]
                 except TypeError:
                     if not is_enumerable(obj):
-                        raise SelectableError(
+                        raise ModelError(
                             "Cannot lookup path '{}' in value '{}'".format(
                                 part, str(obj)))
                     try:
                         part = int(part)
                     except ValueError:
-                        raise SelectableError(
+                        raise ModelError(
                             "Enumerable navigation requires integers")
                     try:
                         obj = obj[part]
@@ -429,18 +431,15 @@ class Selectable:
                         if default is not None:
                             obj = default
                             break
-                        raise SelectableError(
+                        raise ModelError(
                             "Could not find path '{}' in '{}'"
                             .format("/".join(curpath), obj))
                 except KeyError:
                     if default is not None:
                         obj = default
                         break
-                    raise SelectableError("Could not find path '{}' in '{}'"
-                                          .format("/".join(curpath), obj))
+                    raise ModelError("Could not find path '{}' in '{}'"
+                                     .format("/".join(curpath), obj))
                 name = part
 
         return self._new(name, obj)
-
-
-Model = Selectable
