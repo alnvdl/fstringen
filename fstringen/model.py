@@ -1,15 +1,8 @@
-import json
-
-try:
-    import yaml  # type: ignore
-except ImportError:
-    yaml = None
-
-
 class ModelError(Exception):
     """
-    ModelError represents an exception in browsing a model with Model.select.
+    ModelError represents an error in navigating a model with Model.select.
     """
+
     pass
 
 
@@ -27,11 +20,16 @@ def _has_items_method(obj):
     return items and callable(items)
 
 
+# _none represents "None" internally, allowing Model.select to return a
+# default of None just like dict.get.
+_none = object()
+
+
 class Model:
     """
     Model represents any named (name) Python object (value). It acts as a
     subclass of the type of the value object. If that object is a dict-like or
-    is enumerable, a special path syntax can be used to browse it using
+    is enumerable, a special path syntax can be used to navigate it using
     Model.select. If the value contains the special prefix denoted by
     refprefix, that value can be used to jump to other parts of the model by
     using Model.select. Calling the model directly is equivalent to calling
@@ -97,36 +95,6 @@ class Model:
         """
         return Model(name, model, self.refprefix, self.root)
 
-    @staticmethod
-    def fromYAML(fname, refprefix="#"):
-        """
-        Model.fromYAML loads a Model from the YAML file at fname, using the
-        optional refprefix as the reference prefix for the resulting Model.
-        """
-        if yaml is None:
-            raise ModelError("Cannot find 'yaml' module")
-        return Model(fname,
-                     yaml.load(open(fname, "r").read(), Loader=yaml.Loader),
-                     refprefix)
-
-    @staticmethod
-    def fromJSON(fname, refprefix="#"):
-        """
-        Model.fromJSON loads a Model from the JSON file at fname, using the
-        optional refprefix as the reference prefix for the resulting Model.
-        """
-        return Model(fname,
-                     json.loads(open(fname, "r").read()),
-                     refprefix)
-
-    @staticmethod
-    def fromDict(dict_, name="dict", refprefix="#"):
-        """
-        Model.fromDict loads a Model Python dictionary dict_, using the
-        optional refprefix as the reference prefix for the resulting Model.
-        """
-        return Model(name, dict_, refprefix)
-
     def has(self, path=None):
         """
         has returns True if path exists in the Model. If path is None, returns
@@ -167,7 +135,7 @@ class Model:
 
         return isinstance(value, int) and value != 0
 
-    def select(self, path, default=None):
+    def select(self, path, default=_none):
         """
         select returns a new Model based on path, with an optional default
         value in case the path is valid but cannot be not found.
@@ -177,12 +145,12 @@ class Model:
     # Make model(...) a shortcut for model.select(...).
     __call__ = select
 
-    def _select(self, path, default=None):
+    def _select(self, path, default=_none):
         obj = self.value
         name = None
         curpath = []
 
-        # Ignore ref indicators and browse accordingly.
+        # Ignore ref indicators and navigate accordingly.
         if path.startswith(self.refprefix):
             path = path[1:]
             if path.endswith("->"):
@@ -205,11 +173,13 @@ class Model:
                 if _has_items_method(obj):
                     elements = tuple(self._new(k, v) for k, v in obj.items())
                 elif _is_enumerable(obj):
-                    elements = type(obj)(self._new(str(i), v) for i, v in
-                                         enumerate(obj))
+                    elements = type(obj)(
+                        self._new(str(i), v) for i, v in enumerate(obj)
+                    )
                 else:
-                    raise ModelError("Cannot iterate over '{}'"
-                                     .format("/".join(curpath[:-1])))
+                    raise ModelError(
+                        "Cannot iterate over '{}'".format("/".join(curpath[:-1]))
+                    )
                 obj = elements
                 name = "*"
             elif part.endswith("->"):
@@ -225,27 +195,33 @@ class Model:
                     if not _is_enumerable(obj):
                         raise ModelError(
                             "Cannot lookup path '{}' in value '{}'".format(
-                                part, str(obj)))
+                                part, str(obj)
+                            )
+                        )
                     try:
                         part = int(part)
                     except ValueError:
-                        raise ModelError(
-                            "Enumerable navigation requires integers")
+                        raise ModelError("Enumerable navigation requires integers")
                     try:
                         obj = obj[part]
                     except IndexError:
-                        if default is not None:
+                        if default is not _none:
                             obj = default
                             break
                         raise ModelError(
-                            "Could not find path '{}' in '{}'"
-                            .format("/".join(curpath), obj))
+                            "Could not find path '{}' in '{}'".format(
+                                "/".join(curpath), obj
+                            )
+                        )
                 except KeyError:
-                    if default is not None:
+                    if default is not _none:
                         obj = default
                         break
-                    raise ModelError("Could not find path '{}' in '{}'"
-                                     .format("/".join(curpath), obj))
+                    raise ModelError(
+                        "Could not find path '{}' in '{}'".format(
+                            "/".join(curpath), obj
+                        )
+                    )
                 name = part
 
         return self._new(name, obj)

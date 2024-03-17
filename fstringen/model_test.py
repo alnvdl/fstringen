@@ -38,7 +38,7 @@ test_model = {
 
 class TestModel(unittest.TestCase):
     def test_select_absolute(self):
-        m = Model.fromDict(test_model)
+        m = Model("test", test_model)
         # Sub-dict selection
         self.assertDictEqual(
             m.select("/components"), test_model["components"])
@@ -48,8 +48,7 @@ class TestModel(unittest.TestCase):
         # Two-level sub-dict selection
         self.assertEqual(
             m.select("/components/componentB"),
-            (Model.fromDict(test_model["components"]["componentB"],
-                            name="componentB")))
+            (Model("componentB", test_model["components"]["componentB"])))
 
         # Leaf selection
         self.assertEqual(m.select("/components/componentB/properties/color"),
@@ -87,7 +86,7 @@ class TestModel(unittest.TestCase):
             m.select, "/components/componentB/properties/dead/type")
 
     def test_select_star(self):
-        m = Model.fromDict(test_model)
+        m = Model("test", test_model)
         self.assertEqual(
             m.select("/components/*"),
             (test_model["components"]["componentA"],
@@ -112,7 +111,7 @@ class TestModel(unittest.TestCase):
             test_model["components"]["componentB"])
 
     def test_select_relative(self):
-        m = Model.fromDict(test_model)
+        m = Model("test", test_model)
         components = m.select("/components")
         compA = components.select("componentA")
         self.assertEqual(compA, test_model["components"]["componentA"])
@@ -120,7 +119,7 @@ class TestModel(unittest.TestCase):
         self.assertEqual(leaf, False)
 
     def test_select_array(self):
-        m = Model.fromDict(test_model)
+        m = Model("test", test_model)
         self.assertEqual(
             m.select("/components/componentA/properties/nicknames"),
             test_model["components"]["componentA"]["properties"]["nicknames"])
@@ -162,7 +161,7 @@ class TestModel(unittest.TestCase):
                                m.select, "/animals/99")
 
     def test_select_ref(self):
-        m = Model.fromDict(test_model, refprefix="$")
+        m = Model("test", test_model, refprefix="$")
         self.assertEqual(m.select("/components/componentB/properties/parent"),
                          "$/components/componentA")
 
@@ -195,9 +194,10 @@ class TestModel(unittest.TestCase):
             "/components/componentA/properties/brokenref->")
 
     def test_select_default(self):
-        m = Model.fromDict(test_model)
+        m = Model("test", test_model)
         self.assertRaisesRegex(ModelError, "Could not find path .*",
                                m.select, "attr")
+        self.assertEqual(m.select("attr", None), None)
         self.assertEqual(m.select("attr", "default value"), "default value")
 
         self.assertRaisesRegex(ModelError, "Could not find path .*",
@@ -213,7 +213,7 @@ class TestModel(unittest.TestCase):
         self.assertEqual(m.select("/animals/1/type/120", "x"), "x")
 
     def test_select_call(self):
-        m = Model.fromDict(test_model)
+        m = Model("test", test_model)
         self.assertRaisesRegex(ModelError, "Could not find path .*",
                                m, "attr")
         self.assertEqual(m("attr", "default value"), "default value")

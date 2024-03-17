@@ -42,7 +42,7 @@ class TestIntegration(unittest.TestCase):
             {components}
             *"""
 
-        m = Model.fromDict(test_model, refprefix="$")
+        m = Model("test", test_model, refprefix="$")
         self.assertEqual(
             gen_all(m), """# Component componentA:
 
